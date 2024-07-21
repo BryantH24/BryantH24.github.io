@@ -7,9 +7,11 @@
     <title>Price of College in the US</title>
     <script src="https://d3js.org/d3.v6.min.js"></script>
     <script src="https://d3js.org/topojson.v1.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/d3-annotation/2.5.1/d3-annotation.js"></script>
     <style>
         .slide {
             display: flex;
+            opacity: 1;
             flex-direction: column;
             justify-content: center;
             align-items: center;
@@ -112,6 +114,10 @@
 <body>
     <div class="slideshow-container">
         <div class="slide">
+            <div class="title">Slide 0 Placeholder Title</div>
+            <div class="text-area">this is about college prices</div>
+        </div>
+        <div class="slide">
             <div class="title">Slide 1 Placeholder</div>
             <svg width="960" height="600"></svg>
             <div class="text-area">Content for slide 1</div>
@@ -138,19 +144,131 @@
     </div>
     <script src="mapper.js"></script>
     <script>
-        function createMap(svg, tooltip, fillColor) {
-            const width = 960;
-            const height = 600;
+        const width = 960;
+        const height = 600;
+
+        async function getAvgPriceData(year) {
+            const fileData = await d3.csv("https://raw.githubusercontent.com/BryantH24/BryantH24.github.io/dev/nces330_20.csv");
+            const stateToSumPrice = {};
+            const stateToCountPrice = {};
+            fileData.forEach(d => {
+                if (d.Year == year) {
+                    const state = longNameToState[d.State]
+                    if (!stateToSumPrice[state]) {
+                        stateToSumPrice[state] = 0;
+                        stateToCountPrice[state] = 0;
+                    }
+                    stateToSumPrice[state] += parseInt(d.Value);
+                    stateToCountPrice[state]++
+                }
+            });
+            const stateToAvgPrice = {};
+            Object.keys(stateToSumPrice).forEach(state => {
+                stateToAvgPrice[state] = stateToSumPrice[state] / stateToCountPrice[state]
+            });
+            return stateToAvgPrice;
+        }
+
+        function subtractData(d1, d2) {
+            const d3 = {};
+            Object.keys(d1).forEach(key => {
+                d3[key] = d1[key] - d2[key];
+            });
+            return d3;
+        }
+
+        function getMaxStatePrice(data) {
+            let maxState = "";
+            let maxStatePrice = -1;
+            Object.keys(data).forEach(key => {
+                if (key !== "undefined" && data[key] > maxStatePrice) {
+                    maxState = key;
+                    maxStatePrice = data[key];
+                }
+            });
+            return [maxState, maxStatePrice];
+        }
+
+        function getMinStatePrice(data) {
+            let minState = "";
+            let minStatePrice = 99999999;
+            Object.keys(data).forEach(key => {
+                if (data[key] < minStatePrice) {
+                    minState = key;
+                    minStatePrice = data[key];
+                }
+            });
+            return [minState, minStatePrice];
+        }
+
+        function getFeatureCenteroidFromStateName(statesFeature, name, path) {
+            for (let i = 0; i < statesFeature.length; i++) {
+                if (codeToState[statesFeature[i].id] === name) {
+                    return path.centroid(statesFeature[i]);
+                }
+            }
+        }
+
+
+
+        function createAnnotation(isMin, data, statesFeature, path, svg) {
+            const type = d3.annotationLabel;
+            const minOrMaxLabel = isMin ? "Lowest" : "Highest";
+
+            const stateAndStatePrice = isMin ? getMinStatePrice(data) : getMaxStatePrice(data);
+            const state = stateAndStatePrice[0];
+            const statePrice = stateAndStatePrice[1];
+
+            const centroid = getFeatureCenteroidFromStateName(statesFeature.features, state, path);
+            const annotations = [{
+                note: {
+                    label: `${minOrMaxLabel} Average College Tuition is in ${state}, with a price of ${statePrice}`,
+                    bgPadding: 20,
+                    title: ""
+                },
+                data: { date: "18-Sep-09", close: 185.02 },
+                className: "show-bg",
+                x: centroid[0],
+                y: centroid[1],
+                dy: isMin ? height - centroid[1] - 40: -(centroid[1]) + 40,
+                dx: 480 - centroid[0]
+            }]
+
+            const makeAnnotations = d3.annotation()
+                .notePadding(15)
+                .type(type)
+                .accessors({
+                    x: d => x(parseTime(d.date)),
+                    y: d => y(d.close)
+                })
+                .accessorsInverse({
+                    date: d => timeFormat(x.invert(d.x)),
+                    close: d => y.invert(d.y)
+                })
+                .annotations(annotations)
+
+            d3.select(svg)
+                .append("g")
+                .attr("class", "annotation-group")
+                .call(makeAnnotations)
+        }
+
+        function createMap(svg, tooltip, data) {
             const svgObj = d3.select(svg)
                 .attr("width", width)
                 .attr("height", height);
+
+            const scalePriceColor = d3.scaleSequential()
+                .domain([Math.min(...Object.values(data)), Math.max(...Object.values(data))])
+                .interpolator(d3.interpolateBlues);
 
             d3.json("https://d3js.org/us-10m.v1.json").then(us => {
                 const states = topojson.feature(us, us.objects.states);
                 const projection = d3.geoIdentity().fitSize([width, height], states);
                 const path = d3.geoPath(projection);
                 const tooltipElement = d3.select(tooltip);
-
+                createAnnotation(true, data, states, path, svg);
+                createAnnotation(false, data, states, path, svg);
                 svgObj.append("g")
                     .attr("class", "states")
                     .selectAll("path")
@@ -158,9 +276,9 @@
                     .enter().append("path")
                     .attr("class", "state")
                     .attr("d", path)
-                    .attr("fill", fillColor)
+                    .attr("fill", (d) => scalePriceColor(data[codeToState[d.id]]))
                     .on("mouseover", function (event, d) {
-                        const stateName = `${codeToState[d.id]}<br>placeholder<br>placeholder`;
+                        const stateName = `${codeToState[d.id]}<br>Price: ${data[codeToState[d.id]]}<br>placeholder`;
                         tooltipElement.style("opacity", .9);
                         tooltipElement.html(stateName)
                             .style("left", (event.pageX + 5) + "px")
@@ -184,17 +302,22 @@
                         return "translate(" + path.centroid(d) + ")";
                     })
                     .attr("dy", ".3em")
-                    .text(d => codeToState[d.id] || 'Unknown');
+                    .text(d => codeToState[d.id]);
+
             });
         }
 
         let pageNum = 1;
 
-        function createSlides() {
+
+        // specify slide graphs
+        async function createSlides() {
             const slides = document.getElementsByClassName("slide");
-            createMap(slides[0].querySelector("svg"), slides[0].querySelector(".tooltip"), "lightblue");
-            createMap(slides[1].querySelector("svg"), slides[1].querySelector(".tooltip"), "lightgreen");
-            createMap(slides[2].querySelector("svg"), slides[2].querySelector(".tooltip"), "lightyellow");
+            const price2013 = await getAvgPriceData("2013");
+            const price2021 = await getAvgPriceData("2021");
+            createMap(slides[1].querySelector("svg"), slides[1].querySelector(".tooltip"), price2013);
+            createMap(slides[2].querySelector("svg"), slides[2].querySelector(".tooltip"), price2021);
+            createMap(slides[3].querySelector("svg"), slides[3].querySelector(".tooltip"), subtractData(price2021, price2013));
             updatePageNum();
         }
 
