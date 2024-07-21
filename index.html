@@ -9,12 +9,14 @@
     <script src="https://d3js.org/topojson.v1.min.js"></script>
     <style>
         .slide {
-            display: flex;
+            display: none;
+            opacity: 0; 
             flex-direction: column;
             justify-content: center;
             align-items: center;
             height: 100%;
             padding: 20px;
+            transition: opacity 1s ease-in-out;
         }
 
         .slideshow-container {
@@ -22,6 +24,11 @@
             max-width: 100%;
             margin: auto;
             height: 100%;
+        }
+
+        .slide.active {
+            display: flex;
+            opacity: 1;
         }
 
         .next,
@@ -112,6 +119,10 @@
 <body>
     <div class="slideshow-container">
         <div class="slide">
+            <div class="title">Slide 0 Placeholder Title</div>
+            <div class="text-area">this is about college prices</div>
+        </div>
+        <div class="slide">
             <div class="title">Slide 1 Placeholder</div>
             <svg width="960" height="600"></svg>
             <div class="text-area">Content for slide 1</div>
@@ -138,12 +149,49 @@
     </div>
     <script src="mapper.js"></script>
     <script>
-        function createMap(svg, tooltip, fillColor) {
+        async function getAvgPriceData(year) {
+            const fileData = await d3.csv("https://raw.githubusercontent.com/BryantH24/BryantH24.github.io/dev/nces330_20.csv");
+            const stateToSumPrice = {};
+            const stateToCountPrice = {};
+            fileData.forEach(d => {
+                if (d.Year == year) {
+                    const state = longNameToState[d.State]
+                    if (!stateToSumPrice[state]) {
+                        stateToSumPrice[state] = 0;
+                        stateToCountPrice[state] = 0;
+                    }
+                    stateToSumPrice[state] += parseInt(d.Value);
+                    stateToCountPrice[state]++
+                }
+            });
+            console.log(stateToSumPrice);
+            const stateToAvgPrice = {};
+            Object.keys(stateToSumPrice).forEach(state => {
+                stateToAvgPrice[state] = stateToSumPrice[state] / stateToCountPrice[state]
+            });
+            return stateToAvgPrice;
+        }
+
+        function subtractData(d1, d2) {
+            const d3 = {};
+            Object.keys(d1).forEach(key => {
+                d3[key] = d1[key] - d2[key];
+            });
+            return d3;
+        }
+
+
+
+        function createMap(svg, tooltip, data) {
             const width = 960;
             const height = 600;
             const svgObj = d3.select(svg)
                 .attr("width", width)
                 .attr("height", height);
+
+            const scalePriceColor = d3.scaleSequential()
+                .domain([Math.min(...Object.values(data)), Math.max(...Object.values(data))])
+                .interpolator(d3.interpolateBlues);
 
             d3.json("https://d3js.org/us-10m.v1.json").then(us => {
                 const states = topojson.feature(us, us.objects.states);
@@ -158,9 +206,9 @@
                     .enter().append("path")
                     .attr("class", "state")
                     .attr("d", path)
-                    .attr("fill", fillColor)
+                    .attr("fill", (d) => scalePriceColor(data[codeToState[d.id]]))
                     .on("mouseover", function (event, d) {
-                        const stateName = `${codeToState[d.id]}<br>placeholder<br>placeholder`;
+                        const stateName = `${codeToState[d.id]}<br>Price: ${data[codeToState[d.id]]}<br>placeholder`;
                         tooltipElement.style("opacity", .9);
                         tooltipElement.html(stateName)
                             .style("left", (event.pageX + 5) + "px")
@@ -189,12 +237,16 @@
         }
 
         let pageNum = 1;
+        
 
-        function createSlides() {
+        // specify slide graphs
+        async function createSlides() {
             const slides = document.getElementsByClassName("slide");
-            createMap(slides[0].querySelector("svg"), slides[0].querySelector(".tooltip"), "lightblue");
-            createMap(slides[1].querySelector("svg"), slides[1].querySelector(".tooltip"), "lightgreen");
-            createMap(slides[2].querySelector("svg"), slides[2].querySelector(".tooltip"), "lightyellow");
+            const price2013 = await getAvgPriceData("2013");
+            const price2021 = await getAvgPriceData("2021");
+            createMap(slides[1].querySelector("svg"), slides[0].querySelector(".tooltip"), price2013);
+            createMap(slides[2].querySelector("svg"), slides[1].querySelector(".tooltip"), price2021);
+            createMap(slides[3].querySelector("svg"), slides[2].querySelector(".tooltip"), subtractData(price2021, price2013));
             updatePageNum();
         }
 
@@ -216,9 +268,9 @@
             if (n > slides.length) { pageNum = 1 }
             if (n < 1) { pageNum = slides.length }
             for (i = 0; i < slides.length; i++) {
-                slides[i].style.display = "none";
+                slides[i].classList.remove("active");
             }
-            slides[pageNum - 1].style.display = "flex";
+            slides[pageNum - 1].classList.add("active");
             updatePageNum();
         }
 
