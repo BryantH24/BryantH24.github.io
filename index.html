@@ -1,0 +1,282 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>US Map with D3.js and TopoJSON</title>
+    <script src="https://d3js.org/d3.v6.min.js"></script>
+    <script src="https://d3js.org/topojson.v1.min.js"></script>
+    <style>
+        .slide {
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            height: 100%;
+            padding: 20px;
+        }
+
+        .slideshow-container {
+            position: relative;
+            max-width: 100%;
+            margin: auto;
+            height: 100%;
+        }
+
+        .next,
+        .prev {
+            position: absolute;
+            top: 50%;
+            background-color: rgba(0, 0, 0, 0.5);
+            color: white;
+            border: none;
+            cursor: pointer;
+            padding: 10px;
+            border-radius: 3px;
+            font-size: 24px;
+            user-select: none;
+            z-index: 1;
+            transform: translateY(-50%);
+        }
+
+        .prev {
+            left: 0;
+            border-radius: 3px 0 0 3px;
+        }
+
+        .next {
+            right: 0;
+            border-radius: 0 3px 3px 0;
+        }
+
+        .prev:hover,
+        .next:hover {
+            background-color: rgba(0, 0, 0, 0.8);
+        }
+
+        .page-number {
+            position: absolute;
+            top: 120%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            font-size: 16px;
+            color: black;
+            background-color: white;
+            padding: 5px;
+            border-radius: 3px;
+            text-align: center;
+            z-index: 1;
+        }
+
+        .title {
+            font-size: 24px;
+            margin-bottom: 10px;
+        }
+
+        .text-area {
+            font-size: 16px;
+            margin-bottom: 10px;
+            text-align: center;
+        }
+
+        .state {
+            stroke: #333;
+            stroke-width: 0.5px;
+        }
+
+        .tooltip {
+            position: absolute;
+            text-align: center;
+            padding: 4px;
+            background: lightgray;
+            border: 1px solid #333;
+            border-radius: 4px;
+            pointer-events: none;
+            opacity: 0;
+            font-size: 18px;
+        }
+
+        text {
+            font-size: 12px;
+            fill: black;
+        }
+
+        svg {
+            max-width: 100%;
+            max-height: 100%;
+        }
+    </style>
+</head>
+
+<body>
+    <div class="slideshow-container">
+        <div class="slide">
+            <div class="title">Slide 1 Placeholder</div>
+            <svg width="960" height="600"></svg>
+            <div class="text-area">Content for slide 1</div>
+            <div class="tooltip"></div>
+        </div>
+
+        <div class="slide">
+            <div class="title">Slide 2 Placeholder</div>
+            <svg width="960" height="600"></svg>
+            <div class="text-area">Content for slide 2</div>
+            <div class="tooltip"></div>
+        </div>
+
+        <div class="slide">
+            <div class="title">Slide 3 Placeholder</div>
+            <svg width="960" height="600"></svg>
+            <div class="text-area">Content for slide 3</div>
+            <div class="tooltip"></div>
+        </div>
+
+        <a class="prev" onclick="plusSlides(-1)">&#10094;</a>
+        <div class="page-number"></div>
+        <a class="next" onclick="plusSlides(1)">&#10095;</a>
+    </div>
+    <script>
+        const codeToState = {
+            '01': 'AL',
+            '02': 'AK',
+            '04': 'AZ',
+            '05': 'AR',
+            '06': 'CA',
+            '08': 'CO',
+            '09': 'CT',
+            '10': 'DE',
+            '11': 'DC',
+            '12': 'FL',
+            '13': 'GA',
+            '15': 'HI',
+            '16': 'ID',
+            '17': 'IL',
+            '18': 'IN',
+            '19': 'IA',
+            '20': 'KS',
+            '21': 'KY',
+            '22': 'LA',
+            '23': 'ME',
+            '24': 'MD',
+            '25': 'MA',
+            '26': 'MI',
+            '27': 'MN',
+            '28': 'MS',
+            '29': 'MO',
+            '30': 'MT',
+            '31': 'NE',
+            '32': 'NV',
+            '33': 'NH',
+            '34': 'NJ',
+            '35': 'NM',
+            '36': 'NY',
+            '37': 'NC',
+            '38': 'ND',
+            '39': 'OH',
+            '40': 'OK',
+            '41': 'OR',
+            '42': 'PA',
+            '44': 'RI',
+            '45': 'SC',
+            '46': 'SD',
+            '47': 'TN',
+            '48': 'TX',
+            '49': 'UT',
+            '50': 'VT',
+            '51': 'VA',
+            '53': 'WA',
+            '54': 'WV',
+            '55': 'WI',
+            '56': 'WY'
+        };
+
+        function createMap(svg, tooltip, fillColor) {
+            const width = 960;
+            const height = 600;
+            const svgObj = d3.select(svg)
+                .attr("width", width)
+                .attr("height", height);
+
+            d3.json("https://d3js.org/us-10m.v1.json").then(us => {
+                const states = topojson.feature(us, us.objects.states);
+                const projection = d3.geoIdentity().fitSize([width, height], states);
+                const path = d3.geoPath(projection);
+                const tooltipElement = d3.select(tooltip);
+
+                svgObj.append("g")
+                    .attr("class", "states")
+                    .selectAll("path")
+                    .data(states.features)
+                    .enter().append("path")
+                    .attr("class", "state")
+                    .attr("d", path)
+                    .attr("fill", fillColor)
+                    .on("mouseover", function (event, d) {
+                        const stateName = `${codeToState[d.id]}<br>placeholder<br>placeholder`;
+                        tooltipElement.style("opacity", .9);
+                        tooltipElement.html(stateName)
+                            .style("left", (event.pageX + 5) + "px")
+                            .style("top", (event.pageY - 28) + "px");
+                    })
+                    .on("mousemove", function (event) {
+                        tooltipElement.style("left", (event.pageX + 5) + "px")
+                            .style("top", (event.pageY - 28) + "px");
+                    })
+                    .on("mouseout", function () {
+                        tooltipElement.style("opacity", 0);
+                    });
+
+                svgObj.append("g")
+                    .attr("class", "labels")
+                    .selectAll("text")
+                    .data(states.features)
+                    .enter().append("text")
+                    .attr("class", "state-label")
+                    .attr("transform", function (d) {
+                        return "translate(" + path.centroid(d) + ")";
+                    })
+                    .attr("dy", ".3em")
+                    .text(d => codeToState[d.id] || 'Unknown');
+            });
+        }
+
+        let pageNum = 1;
+
+        function createSlides() {
+            const slides = document.getElementsByClassName("slide");
+            createMap(slides[0].querySelector("svg"), slides[0].querySelector(".tooltip"), "lightblue");
+            createMap(slides[1].querySelector("svg"), slides[1].querySelector(".tooltip"), "lightgreen");
+            createMap(slides[2].querySelector("svg"), slides[2].querySelector(".tooltip"), "lightyellow");
+            updatePageNum();
+        }
+
+        createSlides();
+
+        function updatePageNum() {
+            const pageNumberElement = d3.select(".page-number");
+            const slides = d3.selectAll(".slide");
+            pageNumberElement.text(`Page ${pageNum} / ${slides.size()}`);
+        }
+
+        function plusSlides(n) {
+            showSlides(pageNum += n);
+        }
+
+        function showSlides(n) {
+            let i;
+            const slides = document.getElementsByClassName("slide");
+            if (n > slides.length) { pageNum = 1 }
+            if (n < 1) { pageNum = slides.length }
+            for (i = 0; i < slides.length; i++) {
+                slides[i].style.display = "none";
+            }
+            slides[pageNum - 1].style.display = "flex";
+            updatePageNum();
+        }
+
+        showSlides(pageNum);
+    </script>
+</body>
+
+</html>
