@@ -108,6 +108,14 @@
             max-width: 100%;
             max-height: 100%;
         }
+
+        .bar {
+            fill: lightblue;
+        }
+
+        .bar-diff {
+            fill: lightcoral;
+        }
     </style>
 </head>
 
@@ -135,6 +143,13 @@
             <div class="title">Slide 3 Placeholder</div>
             <svg width="960" height="600"></svg>
             <div class="text-area">Content for slide 3</div>
+            <div class="tooltip"></div>
+        </div>
+
+        <div class="slide">
+            <div class="title">Slide 4 Placeholder</div>
+            <svg width="960" height="600"></svg>
+            <div class="text-area">Content for slide 4</div>
             <div class="tooltip"></div>
         </div>
 
@@ -189,6 +204,16 @@
             return [maxState, maxStatePrice];
         }
 
+        function removeUndefined(hashmap) {
+            const newMap = {};
+            for (const key in hashmap) {
+                if (key !== "undefined") {
+                    newMap[key] = hashmap[key];
+                }
+            }
+            return newMap;
+        }
+
         function getMinStatePrice(data) {
             let minState = "";
             let minStatePrice = 99999999;
@@ -211,7 +236,7 @@
 
 
 
-        function createAnnotation(isMin, data, statesFeature, path, svg) {
+        function createAnnotation(isMin, data, statesFeature, path, svgObj) {
             const type = d3.annotationLabel;
             const minOrMaxLabel = isMin ? "Lowest" : "Highest";
 
@@ -230,8 +255,8 @@
                 className: "show-bg",
                 x: centroid[0],
                 y: centroid[1],
-                dy: isMin ? height - centroid[1] - 40: -(centroid[1]) + 40,
-                dx: 480 - centroid[0]
+                dy: isMin ? height - centroid[1] - 40 : -(centroid[1]) + 40,
+                dx: 400 - centroid[0]
             }]
 
             const makeAnnotations = d3.annotation()
@@ -247,8 +272,7 @@
                 })
                 .annotations(annotations)
 
-            d3.select(svg)
-                .append("g")
+            svgObj.append("g")
                 .attr("class", "annotation-group")
                 .call(makeAnnotations)
         }
@@ -267,8 +291,7 @@
                 const projection = d3.geoIdentity().fitSize([width, height], states);
                 const path = d3.geoPath(projection);
                 const tooltipElement = d3.select(tooltip);
-                createAnnotation(true, data, states, path, svg);
-                createAnnotation(false, data, states, path, svg);
+
                 svgObj.append("g")
                     .attr("class", "states")
                     .selectAll("path")
@@ -304,20 +327,125 @@
                     .attr("dy", ".3em")
                     .text(d => codeToState[d.id]);
 
+                createAnnotation(true, data, states, path, svgObj);
+                createAnnotation(false, data, states, path, svgObj);
+
             });
         }
 
         let pageNum = 1;
 
+        function createBarChart(svg, tooltip, diffData, baseData) {
+            const svgObj = d3.select(svg);
+            const tooltipElement = d3.select(tooltip);
+
+            const g = svgObj.append("g")
+                .attr("transform", `translate(${80},${20})`);
+
+            const sortedData = Object.entries(baseData).map(([state, price]) => ({ state, price }));
+            sortedData.sort((a, b) => b.price - a.price);
+
+            const x = d3.scaleBand()
+                .domain(sortedData.map(d => d.state))
+                .range([0, width - 120])
+                .padding(0.1);
+
+            const y = d3.scaleLinear()
+                .domain([Math.min(...Object.values(baseData)) - 100, Math.max(...Object.values(baseData)) + Math.max(...Object.values(diffData))])
+                .nice()
+                .range([height - 80, 0]);
+
+
+
+            console.log(sortedData);
+
+
+            g.append("g")
+                .selectAll(".bar")
+                .data(sortedData)
+                .enter().append("rect")
+                .attr("class", "bar")
+                .attr("x", d => x(d.state))
+                .attr("y", d => y(d.price))
+                .attr("width", x.bandwidth())
+                .attr("height", d => height - 80 - y(d.price))
+                .on("mouseover", function (event, d) {
+                    tooltipElement.style("opacity", .9);
+                    tooltipElement.html(d.state + ": " + d.price)
+                        .style("left", (event.pageX + 5) + "px")
+                        .style("top", (event.pageY - 28) + "px");
+                }).on("mousemove", function (event) {
+                    tooltipElement.style("left", (event.pageX + 5) + "px")
+                        .style("top", (event.pageY - 28) + "px");
+                })
+                .on("mouseout", function (d) {
+                    tooltipElement.style("opacity", 0);
+                });
+
+
+            g.append("g")
+                .attr("class", "diff-bars")
+                .selectAll(".diff-bar")
+                .data(sortedData)
+                .enter().append("rect")
+                .attr("class", "diff-bar")
+                .attr("x", d => x(d.state))
+                .attr("width", x.bandwidth())
+                .attr("y", d => y(Math.max(d.price, d.price + diffData[d.state])))
+                .attr("height", d => Math.abs(y(d.price) - y(d.price + diffData[d.state])))
+                .attr("fill", "red")
+                .on("mouseover", function (event, d) {
+                    tooltipElement.style("opacity", .9);
+                    tooltipElement.html(d.state + ": " + diffData[d.state])
+                        .style("left", (event.pageX + 5) + "px")
+                        .style("top", (event.pageY - 28) + "px");
+                }).on("mousemove", function (event) {
+                    tooltipElement.style("left", (event.pageX + 5) + "px")
+                        .style("top", (event.pageY - 28) + "px");
+                })
+                .on("mouseout", function (d) {
+                    tooltipElement.style("opacity", 0);
+                });
+
+            g.append("g")
+                .attr("class", "x-axis")
+                .attr("transform", `translate(0,${height - 20})`)
+                .call(d3.axisBottom(x));
+
+            g.append("g")
+                .attr("class", "y-axis")
+                .call(d3.axisLeft(y).ticks(null, "s"));
+
+            g.append("text")
+                .attr("x", width / 2)
+                .attr("y", height + 40)
+                .attr("dy", "-0.5em")
+                .attr("text-anchor", "middle")
+                .text("States");
+
+            g.append("text")
+                .attr("transform", "rotate(-90)")
+                .attr("x", -height / 2)
+                .attr("y", -10)
+                .attr("dy", "1em")
+                .attr("text-anchor", "middle")
+                .text("Price in 2013");
+
+        }
+
 
         // specify slide graphs
         async function createSlides() {
             const slides = document.getElementsByClassName("slide");
-            const price2013 = await getAvgPriceData("2013");
-            const price2021 = await getAvgPriceData("2021");
+            let price2013 = await getAvgPriceData("2013");
+            let price2021 = await getAvgPriceData("2021");
+            price2013 = removeUndefined(price2013);
+            price2021 = removeUndefined(price2021);
+            const priceDiff = subtractData(price2021, price2013);
             createMap(slides[1].querySelector("svg"), slides[1].querySelector(".tooltip"), price2013);
             createMap(slides[2].querySelector("svg"), slides[2].querySelector(".tooltip"), price2021);
-            createMap(slides[3].querySelector("svg"), slides[3].querySelector(".tooltip"), subtractData(price2021, price2013));
+            createMap(slides[3].querySelector("svg"), slides[3].querySelector(".tooltip"), priceDiff);
+            createBarChart(slides[4].querySelector("svg"), slides[4].querySelector(".tooltip"), priceDiff, price2013);
             updatePageNum();
         }
 
