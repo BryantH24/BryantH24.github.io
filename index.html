@@ -122,34 +122,75 @@
 <body>
     <div class="slideshow-container">
         <div class="slide">
-            <div class="title">Slide 0 Placeholder Title</div>
-            <div class="text-area">this is about college prices</div>
+            <div class="title">The Price of College Over the Years</div>
+            <div class="text-area">It's no surprise that generally prices for everything increase, including tution and
+                cost of attendance for college.
+                <br>
+
+                But how have college prices increased, and have they increased uniformly across the US? Or are there
+                pattern in the areas where prices have changed the most?
+
+            </div>
         </div>
         <div class="slide">
-            <div class="title">Slide 1 Placeholder</div>
+            <div class="title">Average College Prices, 2013</div>
             <svg width="960" height="600"></svg>
-            <div class="text-area">Content for slide 1</div>
+            <div class="text-area">
+                Darker blue means higher price.
+                <br>
+                In 2013, the states with the most expensive tuitions and cost of attendance were
+                concentrated on the East and West coasts, specifically the Pacific North West plus California and the
+                North East.
+            </div>
             <div class="tooltip"></div>
         </div>
 
         <div class="slide">
-            <div class="title">Slide 2 Placeholder</div>
+            <div class="title">Average College Prices, 2021</div>
             <svg width="960" height="600"></svg>
-            <div class="text-area">Content for slide 2</div>
+            <div class="text-area">
+                Darker blue means higher price.
+                <br>
+                This pattern continues to 2021. Vermont continues to be the state with the most
+                expensive college tuitions.
+            </div>
             <div class="tooltip"></div>
         </div>
 
         <div class="slide">
-            <div class="title">Slide 3 Placeholder</div>
+            <div class="title">Difference in Average College Prices, 2013 to 2021</div>
             <svg width="960" height="600"></svg>
-            <div class="text-area">Content for slide 3</div>
+            <div class="text-area">
+                Darker blue means higher price difference.
+                <br>
+                But if we look at the change in college price, there's less of a pattern.
+                <br>
+                College price increases are still concentrated in the North East and West coasts, but states like
+                Alaska, Nevada, Iowa, Lousiana, and Texas also have high price increases.
+                <br>
+                Even more surprisingly, the average cost of tuition in New Hampshire decreased!
+            </div>
             <div class="tooltip"></div>
         </div>
 
         <div class="slide">
-            <div class="title">Slide 4 Placeholder</div>
+            <div class="title">Difference in Average College Prices, 2013 to 2021</div>
             <svg width="960" height="600"></svg>
-            <div class="text-area">Content for slide 4</div>
+            <div class="dropdown">
+                <label for="sortOrder">Sort by: </label>
+                <select id="sortOrder">
+                    <option value="price2013">Price 2013</option>
+                    <option value="price2021">Price 2021</option>
+                    <option value="priceDiff">Price Change</option>
+                </select>
+            </div>
+
+            <div class="text-area">
+                Blue is the price in 2013, red is the price change between 2013 and 2021.
+                <br>
+                Although the price change may seem to differ across the the US, there seems to be no
+                correlation between the average price in 2013 and the price increase between 2013 and 2021.
+            </div>
             <div class="tooltip"></div>
         </div>
 
@@ -336,18 +377,58 @@
         let pageNum = 1;
 
         function createBarChart(svg, tooltip, diffData, baseData) {
-            const svgObj = d3.select(svg);
+
+
+            const svgObj = d3.select(svg).attr("width", width + 100);;
             const tooltipElement = d3.select(tooltip);
 
             const g = svgObj.append("g")
                 .attr("transform", `translate(${80},${20})`);
 
-            const sortedData = Object.entries(baseData).map(([state, price]) => ({ state, price }));
+            let sortedData = Object.entries(baseData).map(([state, price]) => ({ state, price }));
             sortedData.sort((a, b) => b.price - a.price);
+
+
+            function updateBarChart(sortBy) {
+                if (sortBy === "price2013") {
+                    sortedData = Object.entries(baseData).map(([state, price]) => ({ state, price: price + diffData[state] }));
+                    sortedData.sort((a, b) => baseData[b.state] - baseData[a.state]);
+                } else if (sortBy === "price2021") {
+                    sortedData = Object.entries(baseData).map(([state, price]) => ({ state, price: price + diffData[state] }));
+                    sortedData.sort((a, b) => b.price - a.price);
+                } else if (sortBy === "priceDiff") {
+                    sortedData = Object.entries(baseData).map(([state, price]) => ({ state, price: price + diffData[state] }));
+                    sortedData.sort((a, b) => diffData[b.state] - diffData[a.state]);
+                }
+                x.domain(sortedData.map(d => d.state));
+                y.domain([Math.min(...Object.values(baseData)) - 100, Math.max(...Object.values(baseData)) + Math.max(...Object.values(diffData))]).nice();
+
+                g.selectAll(".bar")
+                    .data(sortedData)
+                    .transition()
+                    .duration(1500)
+                    .attr("x", d => x(d.state))
+                    .attr("y", d => y(d.price))
+                    .attr("height", d => height - 80 - y(d.price));
+
+                g.selectAll(".diff-bar")
+                    .data(sortedData)
+                    .transition()
+                    .duration(1500)
+                    .attr("x", d => x(d.state))
+                    .attr("y", d => y(Math.max(d.price - diffData[d.state], d.price)))
+                    .attr("height", d => Math.abs(y(d.price) - y(d.price - diffData[d.state])));
+
+                g.select(".x-axis")
+                    .transition()
+                    .duration(1500)
+                    .call(d3.axisBottom(x));
+            }
+
 
             const x = d3.scaleBand()
                 .domain(sortedData.map(d => d.state))
-                .range([0, width - 120])
+                .range([0, width - 20])
                 .padding(0.1);
 
             const y = d3.scaleLinear()
@@ -357,7 +438,7 @@
 
 
 
-            console.log(sortedData);
+            // console.log(sortedData);
 
 
             g.append("g")
@@ -409,7 +490,7 @@
 
             g.append("g")
                 .attr("class", "x-axis")
-                .attr("transform", `translate(0,${height - 20})`)
+                .attr("transform", `translate(0,${height - 80})`)
                 .call(d3.axisBottom(x));
 
             g.append("g")
@@ -426,15 +507,26 @@
             g.append("text")
                 .attr("transform", "rotate(-90)")
                 .attr("x", -height / 2)
-                .attr("y", -10)
+                .attr("y", -50)
                 .attr("dy", "1em")
                 .attr("text-anchor", "middle")
                 .text("Price in 2013");
 
+
+            g.append("text")
+                .attr("x", (width - 120) / 2)
+                .attr("y", height - 40)
+                .attr("dy", "1em")
+                .attr("text-anchor", "middle")
+                .text("State");
+
+            d3.select("#sortOrder").on("change", function () {
+                updateBarChart(this.value);
+            });
+
+
         }
 
-
-        // specify slide graphs
         async function createSlides() {
             const slides = document.getElementsByClassName("slide");
             let price2013 = await getAvgPriceData("2013");
