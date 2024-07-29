@@ -116,6 +116,10 @@
         .bar-diff {
             fill: lightcoral;
         }
+
+        .max-value {
+            text-align: right;
+        }
     </style>
 </head>
 
@@ -135,9 +139,12 @@
         <div class="slide">
             <div class="title">Average College Prices, 2013</div>
             <svg width="960" height="600"></svg>
+            <svg id="legend" width="300" height="50"></svg>
+            <div class="data-range" width="300">
+                <span class="min-value"></span>
+                <span class="max-value"></span>
+            </div>
             <div class="text-area">
-                Darker blue means higher price.
-                <br>
                 In 2013, the states with the most expensive tuitions and cost of attendance were
                 concentrated on the East and West coasts, specifically the Pacific North West plus California and the
                 North East.
@@ -148,9 +155,12 @@
         <div class="slide">
             <div class="title">Average College Prices, 2021</div>
             <svg width="960" height="600"></svg>
+            <svg id="legend" width="300" height="50"></svg>
+            <div class="data-range">
+                <span class="min-value"></span>
+                <span class="max-value"></span>
+            </div>
             <div class="text-area">
-                Darker blue means higher price.
-                <br>
                 This pattern continues to 2021. Vermont continues to be the state with the most
                 expensive college tuitions.
             </div>
@@ -160,9 +170,12 @@
         <div class="slide">
             <div class="title">Difference in Average College Prices, 2013 to 2021</div>
             <svg width="960" height="600"></svg>
+            <svg id="legend" width="300" height="50"></svg>
+            <div class="data-range">
+                <span class="min-value"></span>
+                <span class="max-value"></span>
+            </div>
             <div class="text-area">
-                Darker blue means higher price difference.
-                <br>
                 But if we look at the change in college price, there's less of a pattern.
                 <br>
                 College price increases are still concentrated in the North East and West coasts, but states like
@@ -277,6 +290,61 @@
 
 
 
+        function roundVals(map) {
+            const newmap = {};
+            for (const key in map) {
+                if (map.hasOwnProperty(key)) {
+                    newmap[key] = Math.round(map[key] * 100) / 100;
+                }
+            }
+            return newmap;
+        }
+
+        function createLegend(svg, scale) {
+            const key = d3.select(svg);
+            const gradient = key.append("defs")
+                .append("linearGradient")
+                .attr("id", "gradient")
+                .attr("x1", "0%")
+                .attr("y1", "0%")
+                .attr("x2", "100%")
+                .attr("y2", "0%");
+
+            gradient.append("stop")
+                .attr("offset", "0%")
+                .attr("stop-color", d3.interpolateBlues(0))
+                .attr("stop-opacity", 1);
+
+            gradient.append("stop")
+                .attr("offset", "100%")
+                .attr("stop-color", d3.interpolateBlues(1))
+                .attr("stop-opacity", 1);
+
+            key.append("rect")
+                .attr("width", 300)
+                .attr("height", height - 30)
+                .style("fill", "url(#gradient)")
+                .attr("transform", "translate(0,10)");
+
+            const x = d3.scaleLinear()
+                .domain(scale.domain())
+                .range([0, width]);
+
+            const axis = d3.axisBottom(x)
+                .ticks(5)
+                .tickSize(15)
+                .tickFormat(d3.format(".2s"));
+
+            key.append("g")
+                .attr("class", "axis")
+                .attr("transform", `translate(0,${height - 30})`)
+                .call(axis);
+        }
+
+
+
+
+
         function createAnnotation(isMin, data, statesFeature, path, svgObj) {
             const type = d3.annotationLabel;
             const minOrMaxLabel = isMin ? "Lowest" : "Highest";
@@ -318,7 +386,7 @@
                 .call(makeAnnotations)
         }
 
-        function createMap(svg, tooltip, data) {
+        function createMap(svg, tooltip, data, idx) {
             const svgObj = d3.select(svg)
                 .attr("width", width)
                 .attr("height", height);
@@ -342,7 +410,7 @@
                     .attr("d", path)
                     .attr("fill", (d) => scalePriceColor(data[codeToState[d.id]]))
                     .on("mouseover", function (event, d) {
-                        const stateName = `${codeToState[d.id]}<br>Price: ${data[codeToState[d.id]]}<br>placeholder`;
+                        const stateName = `${codeToState[d.id]}<br>Price: ${data[codeToState[d.id]]}`;
                         tooltipElement.style("opacity", .9);
                         tooltipElement.html(stateName)
                             .style("left", (event.pageX + 5) + "px")
@@ -370,6 +438,16 @@
 
                 createAnnotation(true, data, states, path, svgObj);
                 createAnnotation(false, data, states, path, svgObj);
+                d3.selectAll("#legend").each(function () {
+                    createLegend(this, scalePriceColor);
+                });
+
+                console.log(d3.selectAll(".min-value").nodes()[0]);
+
+                let minValueElement = d3.selectAll(".min-value").nodes()[idx];
+                let maxValueElement = d3.selectAll(".max-value").nodes()[idx];
+                minValueElement.textContent = `Min: $${Math.min(...Object.values(data))}`;
+                maxValueElement.textContent = `Max: $${Math.max(...Object.values(data))}`;
 
             });
         }
@@ -533,10 +611,14 @@
             let price2021 = await getAvgPriceData("2021");
             price2013 = removeUndefined(price2013);
             price2021 = removeUndefined(price2021);
-            const priceDiff = subtractData(price2021, price2013);
-            createMap(slides[1].querySelector("svg"), slides[1].querySelector(".tooltip"), price2013);
-            createMap(slides[2].querySelector("svg"), slides[2].querySelector(".tooltip"), price2021);
-            createMap(slides[3].querySelector("svg"), slides[3].querySelector(".tooltip"), priceDiff);
+            let priceDiff = subtractData(price2021, price2013);
+
+            price2013 = roundVals(price2013);
+            price2021 = roundVals(price2021);
+            priceDiff = roundVals(priceDiff);
+            createMap(slides[1].querySelector("svg"), slides[1].querySelector(".tooltip"), price2013, 0);
+            createMap(slides[2].querySelector("svg"), slides[2].querySelector(".tooltip"), price2021, 1);
+            createMap(slides[3].querySelector("svg"), slides[3].querySelector(".tooltip"), priceDiff, 2);
             createBarChart(slides[4].querySelector("svg"), slides[4].querySelector(".tooltip"), priceDiff, price2013);
             updatePageNum();
         }
